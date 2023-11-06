@@ -103,7 +103,7 @@ abstract private[worker] class Flusher(
   def takeBuffer(): CompositeByteBuf = {
     var buffer = bufferQueue.poll()
     if (buffer == null) {
-      buffer = Unpooled.compositeBuffer(256)
+      buffer = Unpooled.compositeBuffer(25600)
     }
     buffer
   }

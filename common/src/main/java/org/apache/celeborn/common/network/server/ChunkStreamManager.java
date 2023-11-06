@@ -39,7 +39,7 @@ import org.apache.celeborn.common.network.buffer.ManagedBuffer;
  */
 public class ChunkStreamManager {
   private static final Logger logger = LoggerFactory.getLogger(ChunkStreamManager.class);
-
+  private AtomicLong chunksBeingTransferredNum = new AtomicLong(0);
   private final AtomicLong nextStreamId;
   // StreamId -> StreamState
   protected final ConcurrentHashMap<Long, StreamState> streams;
@@ -118,6 +118,7 @@ public class ChunkStreamManager {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
       streamState.chunksBeingTransferred++;
+      chunksBeingTransferredNum.incrementAndGet();
     }
   }
 
@@ -125,15 +126,12 @@ public class ChunkStreamManager {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
       streamState.chunksBeingTransferred--;
+      chunksBeingTransferredNum.decrementAndGet();
     }
   }
 
   public long chunksBeingTransferred() {
-    long sum = 0L;
-    for (StreamState streamState : streams.values()) {
-      sum += streamState.chunksBeingTransferred;
-    }
-    return sum;
+    return chunksBeingTransferredNum.get();
   }
 
   /**
