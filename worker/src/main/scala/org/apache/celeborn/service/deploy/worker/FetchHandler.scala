@@ -27,7 +27,7 @@ import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.meta.{FileInfo, FileManagedBuffers}
 import org.apache.celeborn.common.metrics.source.RPCSource
-import org.apache.celeborn.common.network.buffer.NioManagedBuffer
+import org.apache.celeborn.common.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.celeborn.common.network.client.TransportClient
 import org.apache.celeborn.common.network.protocol._
 import org.apache.celeborn.common.network.server.{BaseMessageHandler, ChunkStreamManager}
@@ -161,14 +161,16 @@ class FetchHandler(val conf: TransportConf) extends BaseMessageHandler with Logg
       workerSource.startTimer(WorkerSource.FetchChunkTime, req.toString)
       val fetchTimeMetric = chunkStreamManager.getFetchTimeMetric(req.streamChunkSlice.streamId)
       val fetchBeginTime = System.nanoTime()
+      var buf : ManagedBuffer = null
       try {
-        val buf = chunkStreamManager.getChunk(
+          buf = chunkStreamManager.getChunk(
           req.streamChunkSlice.streamId,
           req.streamChunkSlice.chunkIndex,
           req.streamChunkSlice.offset,
           req.streamChunkSlice.len)
         pendingReadFileSize.addAndGet(buf.size())
         chunkStreamManager.chunkBeingSent(req.streamChunkSlice.streamId)
+        totalChunkNum.incrementAndGet()
         client.getChannel.writeAndFlush(new ChunkFetchSuccess(req.streamChunkSlice, buf))
           .addListener(new GenericFutureListener[Future[_ >: Void]] {
             override def operationComplete(future: Future[_ >: Void]): Unit = {
@@ -192,6 +194,8 @@ class FetchHandler(val conf: TransportConf) extends BaseMessageHandler with Logg
           client.getChannel.writeAndFlush(new ChunkFetchFailure(
             req.streamChunkSlice,
             Throwables.getStackTraceAsString(e)))
+          if(buf != null )
+            pendingReadFileSize.addAndGet(-1 * buf.size())
           workerSource.stopTimer(WorkerSource.FetchChunkTime, req.toString)
       }
     }
