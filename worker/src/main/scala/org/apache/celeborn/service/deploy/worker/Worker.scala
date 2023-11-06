@@ -22,19 +22,16 @@ import java.lang.{Long => JLong}
 import java.util.{HashMap => JHashMap, HashSet => JHashSet}
 import java.util.concurrent._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicIntegerArray}
-
 import scala.collection.JavaConverters._
-
 import com.google.common.annotations.VisibleForTesting
 import io.netty.util.HashedWheelTimer
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.CelebornConf._
 import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.haclient.RssHARetryClient
 import org.apache.celeborn.common.identity.UserIdentifier
 import org.apache.celeborn.common.internal.Logging
-import org.apache.celeborn.common.meta.{DiskInfo, PartitionLocationInfo, WorkerInfo}
+import org.apache.celeborn.common.meta.{DiskInfo, FileManagedBuffers, PartitionLocationInfo, WorkerInfo}
 import org.apache.celeborn.common.metrics.MetricsSystem
 import org.apache.celeborn.common.metrics.source.{JVMCPUSource, JVMSource, RPCSource}
 import org.apache.celeborn.common.network.TransportContext
@@ -44,7 +41,7 @@ import org.apache.celeborn.common.protocol.{PartitionType, PbRegisterWorkerRespo
 import org.apache.celeborn.common.protocol.message.ControlMessages._
 import org.apache.celeborn.common.quota.ResourceConsumption
 import org.apache.celeborn.common.rpc._
-import org.apache.celeborn.common.util.{ShutdownHookManager, ThreadUtils, Utils}
+import org.apache.celeborn.common.util.{MemCacheManager, ShutdownHookManager, ThreadUtils, Utils}
 import org.apache.celeborn.server.common.{HttpService, Service}
 import org.apache.celeborn.service.deploy.worker.storage.{FileWriter, PartitionFilesSorter, StorageManager}
 
@@ -71,6 +68,8 @@ private[celeborn] class Worker(
   private val host = rpcEnv.address.host
   private val rpcPort = rpcEnv.address.port
   Utils.checkHost(host)
+
+  private val memCacheManager = MemCacheManager.getMemCacheManager(conf)
 
   private val WORKER_SHUTDOWN_PRIORITY = 100
   val shutdown = new AtomicBoolean(false)
@@ -223,6 +222,15 @@ private[celeborn] class Worker(
   workerSource.addGauge(
     WorkerSource.PausePushDataAndReplicateCount,
     _ => memoryTracker.getPausePushDataAndReplicateCounter)
+  workerSource.addGauge(WorkerSource.RunningStreamTotalCount, _ => fetchHandler.chunkStreamManager.numStreamStates())
+  workerSource.addGauge(WorkerSource.ChunksBeingTransferredNum, _ => fetchHandler.chunkStreamManager.chunksBeingTransferred())
+  workerSource.addGauge(WorkerSource.readTotalFileSize, _ => fetchHandler.readTotalFileSize)
+  workerSource.addGauge(WorkerSource.pendingTotalReadFileSize, _ => fetchHandler.pendingReadFileSize)
+  workerSource.addGauge(WorkerSource.totalChunkNum, _ => fetchHandler.totalChunkNum)
+  workerSource.addGauge(WorkerSource.fileCacheSize, _ => memCacheManager.getCurrentCacheSize)
+  workerSource.addGauge(WorkerSource.fileCacheNum, _ => memCacheManager.getCacheFileNum)
+  workerSource.addGauge(WorkerSource.fileCacheHitRate, _ => FileManagedBuffers.getMemHitRate)
+
 
   private def heartBeatToMaster(): Unit = {
     val activeShuffleKeys = new JHashSet[String]()

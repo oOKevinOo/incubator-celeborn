@@ -804,6 +804,8 @@ class CelebornConf(loadDefaults: Boolean) extends Cloneable with Logging with Se
 
   def partitionSplitMinimumSize: Long = get(PARTITION_SPLIT_MIN)
 
+  def fileCacheMaxSize: Long = get(FILE_CACHE_MAX_SIZE)
+
   def hdfsDir: String = {
     get(HDFS_DIR).map {
       hdfsDir =>
@@ -2204,6 +2206,14 @@ object CelebornConf extends Logging {
       .version("0.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
+
+  val FILE_CACHE_MAX_SIZE: ConfigEntry[Long] =
+    buildConf("celeborn.shuffle.cache.max")
+      .categories("worker")
+      .doc("Max size for shuffle file cache to men")
+      .version("0.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10g")
 
   val BATCH_HANDLE_CHANGE_PARTITION_ENABLED: ConfigEntry[Boolean] =
     buildConf("celeborn.shuffle.batchHandleChangePartition.enabled")
