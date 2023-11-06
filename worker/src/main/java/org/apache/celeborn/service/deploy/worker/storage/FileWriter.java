@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
+import org.apache.celeborn.common.util.MemCacheManager;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
@@ -81,6 +82,7 @@ public final class FileWriter implements DeviceObserver {
   private RoaringBitmap mapIdBitMap = null;
 
   private final FlushNotifier notifier = new FlushNotifier();
+  private boolean canCache2Men = true;
 
   // //////////////////////////////////////////////////////
   //            map partition                            //
@@ -151,6 +153,7 @@ public final class FileWriter implements DeviceObserver {
   }
 
   private void flush(boolean finalFlush) throws IOException {
+    canCache2Men = false;
     int numBytes = flushBuffer.readableBytes();
     notifier.checkException();
     notifier.numPendingFlushes.incrementAndGet();
@@ -264,7 +267,18 @@ public final class FileWriter implements DeviceObserver {
 
       synchronized (this) {
         if (flushBuffer.readableBytes() > 0) {
-          flush(true);
+          MemCacheManager cacheManager = MemCacheManager.getMemCacheManager();
+          int numBytes = flushBuffer.readableBytes();
+          if(canCache2Men && cacheManager.canCache(numBytes)) {
+            cacheManager.putCache(fileInfo.getFilePath(), flushBuffer.slice());
+            flushBuffer = null;
+            bytesFlushed += numBytes;
+            maybeSetChunkOffsets(true);
+            logger.debug("MemCache for " + fileInfo.getFilePath() + ", and total cache size is " + numBytes);
+          } else {
+            flush(true);
+          }
+
         }
         if (!isChunkOffsetValid()) {
           maybeSetChunkOffsets(true);

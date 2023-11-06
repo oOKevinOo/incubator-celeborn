@@ -20,11 +20,9 @@ package org.apache.celeborn.service.deploy.worker
 import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.StandardCharsets
 import java.util
-import java.util.concurrent.atomic.AtomicBoolean
-
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import com.google.common.base.Throwables
 import io.netty.util.concurrent.{Future, GenericFutureListener}
-
 import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.internal.Logging
 import org.apache.celeborn.common.meta.{FileInfo, FileManagedBuffers}
@@ -44,6 +42,10 @@ class FetchHandler(val conf: TransportConf) extends BaseMessageHandler with Logg
   var storageManager: StorageManager = _
   var partitionsSorter: PartitionFilesSorter = _
   var registered: AtomicBoolean = new AtomicBoolean(false)
+  var pendingReadFileSize: AtomicLong = new AtomicLong(0)
+  var readTotalFileSize: AtomicLong = new AtomicLong(0)
+  var totalChunkNum: AtomicLong = new AtomicLong(0)
+
 
   def init(worker: Worker): Unit = {
     this.workerSource = worker.workerSource
@@ -165,10 +167,15 @@ class FetchHandler(val conf: TransportConf) extends BaseMessageHandler with Logg
           req.streamChunkSlice.chunkIndex,
           req.streamChunkSlice.offset,
           req.streamChunkSlice.len)
+        pendingReadFileSize.addAndGet(buf.size())
         chunkStreamManager.chunkBeingSent(req.streamChunkSlice.streamId)
         client.getChannel.writeAndFlush(new ChunkFetchSuccess(req.streamChunkSlice, buf))
           .addListener(new GenericFutureListener[Future[_ >: Void]] {
             override def operationComplete(future: Future[_ >: Void]): Unit = {
+              if(buf != null ) {
+                pendingReadFileSize.addAndGet(-1 * buf.size())
+                readTotalFileSize.addAndGet(buf.size())
+              }
               chunkStreamManager.chunkSent(req.streamChunkSlice.streamId)
               if (fetchTimeMetric != null) {
                 fetchTimeMetric.update(System.nanoTime() - fetchBeginTime)

@@ -24,17 +24,14 @@ import java.util
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.IntUnaryOperator
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.iq80.leveldb.DB
-
 import org.apache.celeborn.common.CelebornConf
 import org.apache.celeborn.common.exception.CelebornException
 import org.apache.celeborn.common.identity.UserIdentifier
@@ -44,7 +41,7 @@ import org.apache.celeborn.common.metrics.source.AbstractSource
 import org.apache.celeborn.common.network.server.memory.MemoryManager.MemoryPressureListener
 import org.apache.celeborn.common.protocol.{PartitionLocation, PartitionSplitMode, PartitionType}
 import org.apache.celeborn.common.quota.ResourceConsumption
-import org.apache.celeborn.common.util.{PbSerDeUtils, ThreadUtils, Utils}
+import org.apache.celeborn.common.util.{MemCacheManager, PbSerDeUtils, ThreadUtils, Utils}
 import org.apache.celeborn.service.deploy.worker._
 import org.apache.celeborn.service.deploy.worker.storage.StorageManager.hdfsFs
 
@@ -390,6 +387,7 @@ final private[worker] class StorageManager(conf: CelebornConf, workerSource: Abs
   }
 
   def cleanupExpiredShuffleKey(expiredShuffleKeys: util.HashSet[String]): Unit = {
+    val memCacheManager :MemCacheManager = MemCacheManager.getMemCacheManager
     expiredShuffleKeys.asScala.foreach { shuffleKey =>
       logInfo(s"Cleanup expired shuffle $shuffleKey.")
       if (fileInfos.containsKey(shuffleKey)) {
@@ -398,6 +396,10 @@ final private[worker] class StorageManager(conf: CelebornConf, workerSource: Abs
         if (removedFileInfos != null) {
           removedFileInfos.asScala.foreach {
             case (_, fileInfo) =>
+              if(memCacheManager.contains(fileInfo.getFilePath)) {
+                logDebug(s"remove cache ${fileInfo.getFilePath}")
+                memCacheManager.removeCache(fileInfo.getFilePath)
+              }
               if (fileInfo.isHdfs) {
                 isHdfsExpired = true
                 val hdfsFileWriter = hdfsWriters.get(fileInfo.getFilePath)

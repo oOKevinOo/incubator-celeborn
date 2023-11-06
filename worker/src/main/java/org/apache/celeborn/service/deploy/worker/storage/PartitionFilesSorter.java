@@ -39,6 +39,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.netty.buffer.ByteBufUtil;
+import org.apache.celeborn.common.util.*;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -54,11 +56,7 @@ import org.apache.celeborn.common.meta.FileInfo;
 import org.apache.celeborn.common.metrics.source.AbstractSource;
 import org.apache.celeborn.common.network.server.memory.MemoryManager;
 import org.apache.celeborn.common.unsafe.Platform;
-import org.apache.celeborn.common.util.PbSerDeUtils;
-import org.apache.celeborn.common.util.ShuffleBlockInfoUtils;
 import org.apache.celeborn.common.util.ShuffleBlockInfoUtils.ShuffleBlockInfo;
-import org.apache.celeborn.common.util.ThreadUtils;
-import org.apache.celeborn.common.util.Utils;
 import org.apache.celeborn.service.deploy.worker.LevelDBProvider;
 import org.apache.celeborn.service.deploy.worker.ShuffleRecoverHelper;
 import org.apache.celeborn.service.deploy.worker.WorkerSource;
@@ -601,10 +599,21 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
     }
 
     private void initializeFiles() throws IOException {
+      MemCacheManager memCacheManager = MemCacheManager.getMemCacheManager();
       if (isHdfs) {
+        if(memCacheManager.contains(originFilePath)) {
+          FSDataOutputStream hdfsOriginOutput =  StorageManager.hdfsFs().create(new Path(originFilePath), true);
+          hdfsOriginOutput.write(ByteBufUtil.getBytes(memCacheManager.getCache(originFilePath)));
+          hdfsOriginOutput.close();
+        }
         hdfsOriginInput = StorageManager.hdfsFs().open(new Path(originFilePath));
         hdfsSortedOutput = StorageManager.hdfsFs().create(new Path(sortedFilePath));
       } else {
+        if(memCacheManager.contains(originFilePath)) {
+          FileChannel channel = new FileOutputStream(originFilePath).getChannel();
+          channel.write(memCacheManager.getCache(originFilePath).nioBuffer());
+          channel.close();
+        }
         originFileChannel = new FileInputStream(originFilePath).getChannel();
         sortedFileChannel = new FileOutputStream(sortedFilePath).getChannel();
       }

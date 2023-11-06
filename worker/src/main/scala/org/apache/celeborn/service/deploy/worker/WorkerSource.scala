@@ -90,4 +90,13 @@ object WorkerSource {
   val DiskBuffer = "DiskBuffer"
   val PausePushDataCount = "PausePushData"
   val PausePushDataAndReplicateCount = "PausePushDataAndReplicate"
+  val RunningStreamTotalCount = "RunningStreamTotal"
+  val ChunksBeingTransferredNum = "ChunksBeingTransferred"
+  val pendingTotalReadFileSize = "pendingTotalReadFileSize"
+  val readTotalFileSize = "ReadTotalFileSize"
+  val totalChunkNum = "TotalChunk"
+  val fileCacheSize = "FileCacheSize"
+  val fileCacheNum = "FileCacheNum"
+  val fileCacheHitRate = "FileCacheHitRate"
+
 }
