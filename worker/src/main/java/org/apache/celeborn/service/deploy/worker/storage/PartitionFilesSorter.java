@@ -605,6 +605,7 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
           FSDataOutputStream hdfsOriginOutput =  StorageManager.hdfsFs().create(new Path(originFilePath), true);
           hdfsOriginOutput.write(ByteBufUtil.getBytes(memCacheManager.getCache(originFilePath)));
           hdfsOriginOutput.close();
+          memCacheManager.removeCache(originFilePath);
         }
         hdfsOriginInput = StorageManager.hdfsFs().open(new Path(originFilePath));
         hdfsSortedOutput = StorageManager.hdfsFs().create(new Path(sortedFilePath));
@@ -613,6 +614,7 @@ public class PartitionFilesSorter extends ShuffleRecoverHelper {
           FileChannel channel = new FileOutputStream(originFilePath).getChannel();
           channel.write(memCacheManager.getCache(originFilePath).nioBuffer());
           channel.close();
+          memCacheManager.removeCache(originFilePath);
         }
         originFileChannel = new FileInputStream(originFilePath).getChannel();
         sortedFileChannel = new FileOutputStream(sortedFilePath).getChannel();
